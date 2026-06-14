@@ -50,6 +50,14 @@ load_loop:
     jmp load_loop
 
 load_done:
+    mov word [want_w], 1920
+    mov word [want_h], 1080
+    call vbe_find
+    jnc video_ok
+    mov word [want_w], 1280
+    mov word [want_h], 720
+    call vbe_find
+    jnc video_ok
     mov word [want_w], 1024
     mov word [want_h], 768
     call vbe_find

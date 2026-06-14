@@ -6,12 +6,27 @@
 #define PS2_STATUS 0x64
 #define PS2_CMD    0x64
 
+#define VMM_MAGIC              0x564D5868u
+#define VMM_PORT               0x5658
+#define VMM_GETVERSION         10u
+#define VMM_ABS_DATA           39u
+#define VMM_ABS_STATUS         40u
+#define VMM_ABS_COMMAND        41u
+#define VMM_ABS_ENABLE         0x45414552u
+#define VMM_ABS_RELATIVE       0xF5u
+#define VMM_ABS_ABSOLUTE       0x53424152u
+
+#define VMM_BTN_LEFT   0x20u
+#define VMM_BTN_RIGHT  0x10u
+#define VMM_BTN_MIDDLE 0x08u
+
 static volatile int pos_x;
 static volatile int pos_y;
 static volatile int buttons;
 static volatile int dirty;
 static int max_x;
 static int max_y;
+static int vmmouse_present;
 
 static uint8_t packet[3];
 static int packet_index;
@@ -40,6 +55,59 @@ static void mouse_send(uint8_t value)
     inb(PS2_DATA);
 }
 
+static void vmm_call(uint32_t cmd, uint32_t in_bx,
+                     uint32_t* a, uint32_t* b, uint32_t* c, uint32_t* d)
+{
+    uint32_t eax = VMM_MAGIC, ebx = in_bx, ecx = cmd, edx = VMM_PORT;
+    __asm__ volatile("inl %%dx, %%eax"
+                     : "+a"(eax), "+b"(ebx), "+c"(ecx), "+d"(edx));
+    if (a) *a = eax;
+    if (b) *b = ebx;
+    if (c) *c = ecx;
+    if (d) *d = edx;
+}
+
+static void vmmouse_enable(void)
+{
+    uint32_t a, b, c, d;
+    vmm_call(VMM_ABS_COMMAND, VMM_ABS_ENABLE, 0, 0, 0, 0);
+    vmm_call(VMM_ABS_STATUS, 0, &a, &b, &c, &d);
+    vmm_call(VMM_ABS_DATA, 1, &a, &b, &c, &d);
+    vmm_call(VMM_ABS_COMMAND, VMM_ABS_ABSOLUTE, 0, 0, 0, 0);
+}
+
+static int vmmouse_detect(void)
+{
+    uint32_t a, b, c, d;
+    vmm_call(VMM_GETVERSION, 0, &a, &b, &c, &d);
+    return b == VMM_MAGIC && a != 0xFFFFFFFFu;
+}
+
+static void vmmouse_poll(void)
+{
+    uint32_t status, flags, x, y, z, junk;
+    vmm_call(VMM_ABS_STATUS, 0, &status, &junk, &junk, &junk);
+    while ((status & 0xFFFF) >= 4) {
+        if ((status & 0xFFFF0000u) == 0xFFFF0000u) {
+            vmmouse_enable();
+            return;
+        }
+        vmm_call(VMM_ABS_DATA, 4, &flags, &x, &y, &z);
+        pos_x = (int)((x * (uint32_t)max_x) / 0xFFFFu);
+        pos_y = (int)((y * (uint32_t)max_y) / 0xFFFFu);
+        int b = 0;
+        if (flags & VMM_BTN_LEFT)
+            b |= 1;
+        if (flags & VMM_BTN_RIGHT)
+            b |= 2;
+        if (flags & VMM_BTN_MIDDLE)
+            b |= 4;
+        buttons = b;
+        dirty = 1;
+        vmm_call(VMM_ABS_STATUS, 0, &status, &junk, &junk, &junk);
+    }
+}
+
 static void mouse_callback(regs_t* regs)
 {
     (void)regs;
@@ -49,6 +117,11 @@ static void mouse_callback(regs_t* regs)
     uint8_t data = inb(PS2_DATA);
     if (!(status & 0x20))
         return;
+
+    if (vmmouse_present) {
+        vmmouse_poll();
+        return;
+    }
 
     if (packet_index == 0 && !(data & 0x08))
         return;
@@ -103,6 +176,10 @@ void mouse_init(int screen_w, int screen_h)
 
     mouse_send(0xF6);
     mouse_send(0xF4);
+
+    vmmouse_present = vmmouse_detect();
+    if (vmmouse_present)
+        vmmouse_enable();
 
     irq_register(12, mouse_callback);
 }
