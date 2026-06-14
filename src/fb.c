@@ -60,3 +60,27 @@ void fb_flip(void)
     for (int y = 0; y < height; y++)
         memcpy(front + (size_t)y * (size_t)pitch, back + (size_t)y * (size_t)width, (size_t)width * 4);
 }
+
+void fb_flip_rect(int x, int y, int w, int h)
+{
+    if (!ready)
+        return;
+    if (x < 0) {
+        w += x;
+        x = 0;
+    }
+    if (y < 0) {
+        h += y;
+        y = 0;
+    }
+    if (x + w > width)
+        w = width - x;
+    if (y + h > height)
+        h = height - y;
+    if (w <= 0 || h <= 0)
+        return;
+    for (int row = 0; row < h; row++)
+        memcpy(front + (size_t)(y + row) * (size_t)pitch + (size_t)x * 4,
+               back + (size_t)(y + row) * (size_t)width + (size_t)x,
+               (size_t)w * 4);
+}

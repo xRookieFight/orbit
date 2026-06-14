@@ -23,7 +23,8 @@ BOOT_BIN   := $(BUILD)/boot.bin
 IMAGE      := $(BUILD)/orbit.img
 
 QEMU       := qemu-system-x86_64
-QEMUFLAGS  := -drive file=$(IMAGE),format=raw,if=ide -m 256M -no-reboot -vga std \
+QEMUFLAGS  := -drive file=$(IMAGE),format=raw,if=ide -m 1G -no-reboot \
+              -vga std -global VGA.vgamem_mb=64 \
               -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
               -netdev user,id=net0 -device rtl8139,netdev=net0
 
@@ -60,10 +61,10 @@ run: $(IMAGE)
 	$(QEMU) $(QEMUFLAGS) -display none -serial stdio
 
 gui: $(IMAGE)
-	GDK_BACKEND=x11 $(QEMU) $(QEMUFLAGS) -display gtk,gl=off -serial stdio
+	GDK_BACKEND=x11 $(QEMU) $(QEMUFLAGS) -display gtk,gl=off,show-cursor=off -serial stdio
 
 fullscreen: $(IMAGE)
-	GDK_BACKEND=x11 $(QEMU) $(QEMUFLAGS) -display gtk,gl=off -serial stdio -full-screen
+	GDK_BACKEND=x11 $(QEMU) $(QEMUFLAGS) -display gtk,gl=off,show-cursor=off -serial stdio -full-screen
 
 logo:
 	python3 scripts/genlogo.py assets/orbit_logo.png

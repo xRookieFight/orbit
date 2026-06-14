@@ -39,7 +39,15 @@ static const menu_item_t menu_items[] = {
 };
 #define MENU_COUNT ((int)(sizeof(menu_items) / sizeof(menu_items[0])))
 
+#define CURSOR_W 11
+#define CURSOR_H 17
+
 static uint32_t* wallpaper;
+static uint32_t* scene;
+static int cur_px = -1;
+static int cur_py = -1;
+static int last_mx = -1;
+static int last_my = -1;
 static window_t* term_win;
 static int active;
 static int dirty;
@@ -304,12 +312,13 @@ static void draw_cursor(void)
     }
 }
 
-static void composite(void)
+static void scene_compose(void)
 {
     int w = fb_width();
     int h = fb_height();
+    uint32_t* back = fb_backbuffer();
     if (wallpaper)
-        memcpy(fb_backbuffer(), wallpaper, (size_t)w * (size_t)h * 4);
+        memcpy(back, wallpaper, (size_t)w * (size_t)h * 4);
     else
         gfx_fill(0, 0, w, h, THEME_WALL_BOTTOM);
     gfx_clip_reset();
@@ -317,8 +326,46 @@ static void composite(void)
     draw_taskbar();
     if (start_open)
         draw_start_menu();
+    if (scene)
+        memcpy(scene, back, (size_t)w * (size_t)h * 4);
+}
+
+static void present_full(void)
+{
+    scene_compose();
     draw_cursor();
+    cur_px = mouse_x();
+    cur_py = mouse_y();
     fb_flip();
+}
+
+static void present_cursor(void)
+{
+    int w = fb_width();
+    int h = fb_height();
+    uint32_t* back = fb_backbuffer();
+
+    if (scene && cur_px > -CURSOR_W && cur_py > -CURSOR_H) {
+        for (int row = 0; row < CURSOR_H; row++) {
+            int yy = cur_py + row;
+            if (yy < 0 || yy >= h)
+                continue;
+            int x0 = cur_px < 0 ? 0 : cur_px;
+            int x1 = cur_px + CURSOR_W;
+            if (x1 > w)
+                x1 = w;
+            if (x1 > x0)
+                memcpy(back + (size_t)yy * (size_t)w + x0,
+                       scene + (size_t)yy * (size_t)w + x0,
+                       (size_t)(x1 - x0) * 4);
+        }
+        fb_flip_rect(cur_px, cur_py, CURSOR_W, CURSOR_H);
+    }
+
+    draw_cursor();
+    fb_flip_rect(mouse_x(), mouse_y(), CURSOR_W, CURSOR_H);
+    cur_px = mouse_x();
+    cur_py = mouse_y();
 }
 
 static void taskbar_click(int mx)
@@ -462,13 +509,21 @@ void desktop_pump(void)
 
     if (term_consume_dirty())
         dirty = 1;
-    if (mouse_consume_dirty())
-        dirty = 1;
+    mouse_consume_dirty();
+
+    int mx = mouse_x();
+    int my = mouse_y();
 
     if (dirty && t != last_draw_tick) {
-        composite();
+        present_full();
         dirty = 0;
         last_draw_tick = t;
+        last_mx = mx;
+        last_my = my;
+    } else if (mx != last_mx || my != last_my) {
+        present_cursor();
+        last_mx = mx;
+        last_my = my;
     }
 }
 
@@ -476,6 +531,7 @@ void desktop_init(void)
 {
     term_init();
     wallpaper_build();
+    scene = (uint32_t*)kmalloc((size_t)fb_width() * (size_t)fb_height() * 4);
 
     int tw = term_pixel_width();
     int th = term_pixel_height();
@@ -491,5 +547,5 @@ void desktop_init(void)
     active = 1;
     pit_set_idle(desktop_pump);
     dirty = 1;
-    composite();
+    present_full();
 }
