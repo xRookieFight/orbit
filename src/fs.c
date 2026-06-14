@@ -46,6 +46,14 @@ static void free_tree(fs_node_t* node)
     kfree(node);
 }
 
+static int is_descendant_of(fs_node_t* node, fs_node_t* ancestor)
+{
+    for (fs_node_t* cur = node; cur; cur = cur->parent)
+        if (cur == ancestor)
+            return 1;
+    return 0;
+}
+
 fs_node_t* fs_root(void)
 {
     return root;
