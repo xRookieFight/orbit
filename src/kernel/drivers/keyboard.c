@@ -1,7 +1,6 @@
 #include "keyboard.h"
 #include "isr.h"
 #include "io.h"
-#include "term.h"
 
 #define KBD_DATA   0x60
 #define BUFFER_SIZE 256
@@ -22,13 +21,13 @@ static const char map_shift[128] = {
     '*', 0, ' '
 };
 
-static volatile char ring[BUFFER_SIZE];
+static volatile int ring[BUFFER_SIZE];
 static volatile uint32_t head;
 static volatile uint32_t tail;
 static int shift_down;
 static int caps_lock;
 
-static void push(char c)
+static void push(int c)
 {
     uint32_t next = (head + 1) % BUFFER_SIZE;
     if (next != tail) {
@@ -58,11 +57,11 @@ static void keyboard_callback(regs_t* regs)
         return;
     }
     if (code == 0x49) {
-        term_scroll_view_up();
+        push(KEY_PAGE_UP);
         return;
     }
     if (code == 0x51) {
-        term_scroll_view_down();
+        push(KEY_PAGE_DOWN);
         return;
     }
     if (code >= 128)
@@ -89,7 +88,7 @@ int keyboard_poll(void)
 {
     if (head == tail)
         return -1;
-    char c = ring[tail];
+    int c = ring[tail];
     tail = (tail + 1) % BUFFER_SIZE;
-    return (int)(uint8_t)c;
+    return c;
 }

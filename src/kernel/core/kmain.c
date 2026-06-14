@@ -22,9 +22,7 @@
 #include "netcmd.h"
 #include "shell.h"
 #include "log.h"
-#include "splash.h"
-#include "desktop.h"
-#include "palette.h"
+#include "gui.h"
 
 static void warmup_serial(void)
 {
@@ -33,7 +31,7 @@ static void warmup_serial(void)
     serial_putc('\n');
 }
 
-void kmain(void)
+static void kernel_init(void)
 {
     serial_init();
     warmup_serial();
@@ -49,16 +47,20 @@ void kmain(void)
     heap_init();
     fb_init();
     serial_write("[boot] framebuffer\n");
+}
 
-    splash_show();
-
+static void os_init(void)
+{
     fs_init();
     user_init();
     proc_init();
     api_init();
     app_registry_init();
     builtins_register();
+}
 
+static void network_init(void)
+{
     net_init();
     udp_init();
     dhcp_init();
@@ -72,11 +74,16 @@ void kmain(void)
         serial_write("[boot] no network device\n");
     }
     netcmd_register();
+}
 
+void kmain(void)
+{
+    kernel_init();
+    gui_show_splash();
+    os_init();
+    network_init();
     log_init();
-
-    desktop_init();
-    serial_write("[boot] desktop ready\n");
+    gui_init();
 
     klog("INFO", "Orbit %s boot complete", ORBIT_VERSION);
 

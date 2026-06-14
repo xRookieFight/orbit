@@ -81,7 +81,7 @@ def write_header(path, w, h, rgba, name):
 
 def main():
     src = sys.argv[1] if len(sys.argv) > 1 else "assets/orbit_logo.png"
-    dst = sys.argv[2] if len(sys.argv) > 2 else "src/logo_data.h"
+    dst = sys.argv[2] if len(sys.argv) > 2 else "src/gui/logo_data.h"
     name = sys.argv[3] if len(sys.argv) > 3 else "orbit_logo"
     w, h, rgba = read_png(src)
     write_header(dst, w, h, rgba, name)

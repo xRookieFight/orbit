@@ -1,8 +1,7 @@
 #include "isr.h"
 #include "idt.h"
 #include "pic.h"
-#include "console.h"
-#include "palette.h"
+#include "panic.h"
 #include "io.h"
 
 extern void isr0(void);  extern void isr1(void);  extern void isr2(void);  extern void isr3(void);
@@ -62,14 +61,8 @@ void irq_register(int irq, irq_handler_t handler)
 
 void isr_handler(regs_t* regs)
 {
-    console_set_color(COL_LIGHT_RED, COL_BLACK);
-    console_printf("\n*** Orbit kernel panic ***\n");
-    if (regs->int_no < 32)
-        console_printf("Exception: %s\n", exception_messages[regs->int_no]);
-    console_printf("int=%d err=%d rip=%p\n", (int)regs->int_no, (int)regs->err_code, (void*)regs->rip);
-    console_set_color(COL_LIGHT_GREY, COL_BLACK);
-    for (;;)
-        __asm__ volatile("cli; hlt");
+    const char* message = regs->int_no < 32 ? exception_messages[regs->int_no] : "Unknown interrupt";
+    panic_exception(message, regs->int_no, regs->err_code, regs->rip);
 }
 
 void irq_handler(regs_t* regs)

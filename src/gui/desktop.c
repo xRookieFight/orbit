@@ -18,6 +18,7 @@
 #include "ata.h"
 #include "diskmap.h"
 #include "appreg.h"
+#include "console.h"
 #include "apps/browser.h"
 #include "dns.h"
 #include "tcp.h"
@@ -196,7 +197,12 @@ static void term_on_draw(window_t* win, int ox, int oy)
 static void term_on_key(window_t* win, int ch)
 {
     (void)win;
-    term_feed_key((char)ch);
+    if (ch == KEY_PAGE_UP)
+        term_scroll_view_up();
+    else if (ch == KEY_PAGE_DOWN)
+        term_scroll_view_down();
+    else
+        term_feed_key((char)ch);
 }
 
 static void menu_rect(int* x, int* y, int* w, int* h)
@@ -477,12 +483,46 @@ static void handle_mouse(void)
         dragging = 0;
 }
 
-static void route_key(char c)
+static void route_key(int c)
 {
     window_t* win = wm_focused();
     if (win && win->on_key)
-        win->on_key(win, (int)(uint8_t)c);
+        win->on_key(win, c);
 }
+
+static int desktop_console_active(void)
+{
+    return desktop_active();
+}
+
+static void desktop_console_clear(void)
+{
+    term_clear();
+}
+
+static void desktop_console_set_color(uint8_t fg, uint8_t bg)
+{
+    term_set_color(fg, bg);
+}
+
+static void desktop_console_putc(char c)
+{
+    term_putc(c);
+}
+
+static int desktop_console_read_key(void)
+{
+    return term_read_key();
+}
+
+static const console_backend_t desktop_console = {
+    desktop_console_active,
+    desktop_console_clear,
+    desktop_console_set_color,
+    desktop_console_putc,
+    desktop_console_read_key,
+    desktop_pump
+};
 
 void desktop_pump(void)
 {
@@ -553,6 +593,7 @@ void desktop_init(void)
 
     wm_show(term_win);
     active = 1;
+    console_bind_backend(&desktop_console);
     pit_set_idle(desktop_pump);
     dirty = 1;
     present_full();

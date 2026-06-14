@@ -22,7 +22,7 @@ static void about_draw(window_t* win, int ox, int oy)
     y += 22;
     gfx_text(cx - gfx_text_width(ORBIT_TAGLINE) / 2, y, THEME_TEXT_DIM, ORBIT_TAGLINE);
     y += 22;
-    gfx_text(cx - gfx_text_width("Made by xRookieFight") / 2, y, THEME_ACCENT, "Made by xRookieFight");
+    gfx_text(cx - gfx_text_width("Made by Orbit Developers") / 2, y, THEME_ACCENT, "Made by Orbit Developers");
 }
 
 static window_t* about_create(void)

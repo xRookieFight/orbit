@@ -1,29 +1,34 @@
 #include "console.h"
-#include "term.h"
 #include "serial.h"
-#include "desktop.h"
 #include "fmt.h"
-#include "io.h"
+
+static const console_backend_t* backend;
 
 void console_init(void)
 {
 }
 
+void console_bind_backend(const console_backend_t* next)
+{
+    backend = next;
+}
+
 void console_clear(void)
 {
-    if (desktop_active())
-        term_clear();
+    if (backend && backend->active && backend->active() && backend->clear)
+        backend->clear();
 }
 
 void console_set_color(uint8_t fg, uint8_t bg)
 {
-    term_set_color(fg, bg);
+    if (backend && backend->active && backend->active() && backend->set_color)
+        backend->set_color(fg, bg);
 }
 
 void console_putc(char c)
 {
-    if (desktop_active())
-        term_putc(c);
+    if (backend && backend->active && backend->active() && backend->putc)
+        backend->putc(c);
     serial_putc(c);
 }
 
@@ -55,12 +60,14 @@ void console_printf(const char* fmt, ...)
 char console_getc(void)
 {
     for (;;) {
-        int c = term_read_key();
-        if (c >= 0)
+        int active = backend && backend->active && backend->active();
+        int c = active && backend->read_key ? backend->read_key() : -1;
+        if (c >= 0 && c < 256)
             return (char)c;
-        if (!desktop_active() && serial_has_input())
+        if (!active && serial_has_input())
             return serial_getc();
-        desktop_pump();
+        if (active && backend->pump)
+            backend->pump();
         __asm__ volatile("hlt");
     }
 }

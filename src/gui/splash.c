@@ -23,7 +23,7 @@ static void draw_base(void)
 
     gfx_text_scaled(cx - 5 * 12, cy + 120, 0xFFE8EAF0, "ORBIT", 3, 1);
     gfx_text(cx - gfx_text_width(ORBIT_TAGLINE) / 2, cy + 178, THEME_TEXT_DIM, ORBIT_TAGLINE);
-    gfx_text(cx - gfx_text_width("Made by xRookieFight") / 2, h - 60, 0xFF55617A, "Made by xRookieFight");
+    gfx_text(cx - gfx_text_width("Made by Orbit Developers") / 2, h - 60, 0xFF55617A, "Made by Orbit Developers");
 }
 
 static void draw_bar(int filled)
