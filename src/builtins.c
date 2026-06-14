@@ -206,8 +206,16 @@ static int cmd_mv(int argc, char** argv)
         api_print("usage: mv <source> <dest>\n");
         return 1;
     }
-    if (fs_move(api_cwd(), argv[1], argv[2]) < 0)
+    
+    int r = fs_move(api_cwd(), argv[1], argv[2]);
+    if (r == -3) {
+        api_print("mv: cannot move directory into its own subdirectory\n");
+        return 1;
+    }
+    if (r < 0) {
         api_print("mv: cannot move %s\n", argv[1]);
+        return 1;
+    }
     return 0;
 }
 
