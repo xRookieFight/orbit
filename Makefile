@@ -60,10 +60,10 @@ run: $(IMAGE)
 	$(QEMU) $(QEMUFLAGS) -display none -serial stdio
 
 gui: $(IMAGE)
-	$(QEMU) $(QEMUFLAGS) -serial stdio
+	GDK_BACKEND=x11 $(QEMU) $(QEMUFLAGS) -display gtk,gl=off -serial stdio
 
 fullscreen: $(IMAGE)
-	$(QEMU) $(QEMUFLAGS) -serial stdio -full-screen
+	GDK_BACKEND=x11 $(QEMU) $(QEMUFLAGS) -display gtk,gl=off -serial stdio -full-screen
 
 logo:
 	python3 scripts/genlogo.py assets/orbit_logo.png

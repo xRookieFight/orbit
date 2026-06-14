@@ -2,19 +2,38 @@
 
 void* memset(void* dest, int value, size_t count)
 {
-    uint8_t* d = (uint8_t*)dest;
-    while (count--)
-        *d++ = (uint8_t)value;
-    return dest;
+    void* ret = dest;
+    size_t words = count >> 3;
+    uint64_t pat = (uint8_t)value;
+    pat |= pat << 8;
+    pat |= pat << 16;
+    pat |= pat << 32;
+    __asm__ volatile("rep stosq"
+                     : "+D"(dest), "+c"(words)
+                     : "a"(pat)
+                     : "memory");
+    size_t rem = count & 7;
+    __asm__ volatile("rep stosb"
+                     : "+D"(dest), "+c"(rem)
+                     : "a"((uint8_t)value)
+                     : "memory");
+    return ret;
 }
 
 void* memcpy(void* dest, const void* src, size_t count)
 {
-    uint8_t* d = (uint8_t*)dest;
-    const uint8_t* s = (const uint8_t*)src;
-    while (count--)
-        *d++ = *s++;
-    return dest;
+    void* ret = dest;
+    size_t words = count >> 3;
+    size_t rem = count & 7;
+    __asm__ volatile("rep movsq"
+                     : "+D"(dest), "+S"(src), "+c"(words)
+                     :
+                     : "memory");
+    __asm__ volatile("rep movsb"
+                     : "+D"(dest), "+S"(src), "+c"(rem)
+                     :
+                     : "memory");
+    return ret;
 }
 
 void* memmove(void* dest, const void* src, size_t count)

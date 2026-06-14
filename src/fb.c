@@ -53,6 +53,10 @@ void fb_flip(void)
 {
     if (!ready)
         return;
+    if (pitch == width * 4) {
+        memcpy(front, back, (size_t)width * (size_t)height * 4);
+        return;
+    }
     for (int y = 0; y < height; y++)
         memcpy(front + (size_t)y * (size_t)pitch, back + (size_t)y * (size_t)width, (size_t)width * 4);
 }
