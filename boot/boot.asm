@@ -2,7 +2,6 @@
 [ORG 0x7C00]
 
 KERNEL_LOAD_SEG equ 0x1000
-KERNEL_LOAD_OFF equ 0x0000
 
 %ifndef KERNEL_SECTORS
 %define KERNEL_SECTORS 96
@@ -17,9 +16,6 @@ start:
     mov sp, 0x7C00
     mov [boot_drive], dl
     sti
-
-    mov si, msg_load
-    call print16
 
     mov word [cur_lba], 1
     mov word [cur_seg], KERNEL_LOAD_SEG
@@ -36,16 +32,14 @@ load_loop:
     mov [dap_count], ax
     mov bx, [cur_seg]
     mov [dap_seg], bx
-    mov word [dap_off], KERNEL_LOAD_OFF
+    mov word [dap_off], 0
     mov bx, [cur_lba]
     mov [dap_lba], bx
-    mov word [dap_lba+2], 0
-    mov dword [dap_lba+4], 0
     mov si, dap
     mov dl, [boot_drive]
     mov ah, 0x42
     int 0x13
-    jc disk_err
+    jc fail
     mov bx, [dap_count]
     sub cx, bx
     add [cur_lba], bx
@@ -56,9 +50,17 @@ load_loop:
     jmp load_loop
 
 load_done:
-    mov si, msg_ok
-    call print16
+    mov word [want_w], 1024
+    mov word [want_h], 768
+    call vbe_find
+    jnc video_ok
+    mov word [want_w], 800
+    mov word [want_h], 600
+    call vbe_find
+    jnc video_ok
+    jmp fail
 
+video_ok:
     in al, 0x92
     or al, 2
     out 0x92, al
@@ -70,23 +72,65 @@ load_done:
     mov cr0, eax
     jmp 0x08:pmode_entry
 
-disk_err:
+vbe_find:
+    mov ax, 0x4F00
+    xor di, di
+    mov es, di
+    mov di, 0x500
+    int 0x10
+    cmp ax, 0x004F
+    jne .fail
+    mov si, [0x50E]
+    mov ax, [0x510]
+    mov fs, ax
+.next:
+    mov ax, [fs:si]
+    add si, 2
+    cmp ax, 0xFFFF
+    je .fail
+    mov [cur_mode], ax
+    mov cx, ax
+    mov ax, 0x4F01
+    xor di, di
+    mov es, di
+    mov di, 0x8000
+    int 0x10
+    cmp ax, 0x004F
+    jne .next
+    cmp byte [0x8019], 32
+    jne .next
+    mov ax, [0x8012]
+    cmp ax, [want_w]
+    jne .next
+    mov ax, [0x8014]
+    cmp ax, [want_h]
+    jne .next
+    test byte [0x8000], 0x80
+    jz .next
+    mov bx, [cur_mode]
+    or bx, 0x4000
+    mov ax, 0x4F02
+    int 0x10
+    cmp ax, 0x004F
+    jne .next
+    clc
+    ret
+.fail:
+    stc
+    ret
+
+fail:
     mov si, msg_err
-    call print16
+.print:
+    lodsb
+    test al, al
+    jz .hang
+    mov ah, 0x0E
+    int 0x10
+    jmp .print
 .hang:
     hlt
     jmp .hang
-
-print16:
-    mov ah, 0x0E
-.next:
-    lodsb
-    test al, al
-    jz .done
-    int 0x10
-    jmp .next
-.done:
-    ret
 
 [BITS 32]
 pmode_entry:
@@ -113,10 +157,11 @@ gdt_desc:
 boot_drive db 0
 cur_lba    dw 0
 cur_seg    dw 0
+cur_mode   dw 0
+want_w     dw 0
+want_h     dw 0
 
-msg_load db "Orbit boot: loading kernel...", 13, 10, 0
-msg_ok   db "ok", 13, 10, 0
-msg_err  db "disk read error", 13, 10, 0
+msg_err db "boot error", 0
 
 align 4
 dap:

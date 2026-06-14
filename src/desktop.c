@@ -1,0 +1,446 @@
+#include "desktop.h"
+#include "fb.h"
+#include "gfx.h"
+#include "theme.h"
+#include "term.h"
+#include "wm.h"
+#include "mouse.h"
+#include "keyboard.h"
+#include "serial.h"
+#include "rtc.h"
+#include "pit.h"
+#include "heap.h"
+#include "power.h"
+#include "winapps.h"
+#include "fmt.h"
+#include "string.h"
+#include "orbit.h"
+#include "io.h"
+
+#define TASKBAR_H 44
+#define MENU_W 250
+#define MENU_ITEM_H 36
+
+typedef struct {
+    const char* label;
+    int separator;
+} menu_item_t;
+
+static const menu_item_t menu_items[] = {
+    { "Terminal", 0 },
+    { "Files", 0 },
+    { "System Monitor", 0 },
+    { "About Orbit", 0 },
+    { "", 1 },
+    { "Reboot", 0 },
+    { "Shut Down", 0 },
+};
+#define MENU_COUNT ((int)(sizeof(menu_items) / sizeof(menu_items[0])))
+
+static uint32_t* wallpaper;
+static window_t* term_win;
+static int active;
+static int dirty;
+static int start_open;
+static int dragging;
+static window_t* drag_win;
+static int drag_dx;
+static int drag_dy;
+static int prev_buttons;
+static uint32_t last_blink;
+static int last_second;
+static uint32_t last_draw_tick;
+
+static const char* cursor_img[] = {
+    "X..........",
+    "XX.........",
+    "X#X........",
+    "X##X.......",
+    "X###X......",
+    "X####X.....",
+    "X#####X....",
+    "X######X...",
+    "X#######X..",
+    "X########X.",
+    "X#####XXXXX",
+    "X##X##X....",
+    "X#X.X##X...",
+    "XX..X##X...",
+    "X....X##X..",
+    ".....X##X..",
+    "......XX...",
+};
+
+window_t* desktop_terminal(void)
+{
+    return term_win;
+}
+
+void desktop_mark_dirty(void)
+{
+    dirty = 1;
+}
+
+int desktop_active(void)
+{
+    return active;
+}
+
+static void wallpaper_build(void)
+{
+    int w = fb_width();
+    int h = fb_height();
+    wallpaper = (uint32_t*)kmalloc((size_t)w * (size_t)h * 4);
+    if (!wallpaper)
+        return;
+
+    for (int y = 0; y < h; y++) {
+        uint32_t row;
+        if (y < h / 2)
+            row = gfx_mix(THEME_WALL_TOP, THEME_WALL_MID, (y * 256) / (h / 2));
+        else
+            row = gfx_mix(THEME_WALL_MID, THEME_WALL_BOTTOM, ((y - h / 2) * 256) / (h / 2));
+        for (int x = 0; x < w; x++)
+            wallpaper[(size_t)y * (size_t)w + (size_t)x] = row;
+    }
+
+    uint32_t* save = fb_backbuffer();
+    memcpy(save, wallpaper, (size_t)w * (size_t)h * 4);
+
+    int cx = w / 2;
+    int cy = h / 2 - 40;
+    gfx_clip_reset();
+    gfx_circle(cx, cy, 70, gfx_mix(THEME_WALL_MID, THEME_ACCENT, 60));
+    gfx_circle(cx - 22, cy - 22, 24, gfx_mix(THEME_WALL_MID, THEME_ACCENT, 100));
+    gfx_ring(cx, cy, 120, 5, gfx_mix(THEME_WALL_MID, THEME_ACCENT, 90));
+    gfx_ring(cx, cy, 150, 2, gfx_mix(THEME_WALL_MID, THEME_ACCENT, 45));
+    gfx_text_scaled(cx - 5 * 16, cy + 170, gfx_mix(THEME_WALL_MID, 0xFFFFFFFF, 140), "ORBIT", 4, 1);
+    gfx_text(cx - gfx_text_width(ORBIT_TAGLINE) / 2, cy + 240,
+             gfx_mix(THEME_WALL_MID, 0xFFFFFFFF, 80), ORBIT_TAGLINE);
+
+    memcpy(wallpaper, save, (size_t)w * (size_t)h * 4);
+}
+
+static void term_on_draw(window_t* win, int ox, int oy)
+{
+    (void)win;
+    term_draw(ox, oy);
+}
+
+static void term_on_key(window_t* win, int ch)
+{
+    (void)win;
+    term_feed_key((char)ch);
+}
+
+static void menu_rect(int* x, int* y, int* w, int* h)
+{
+    *w = MENU_W;
+    *h = 64 + MENU_COUNT * MENU_ITEM_H + 12;
+    *x = 8;
+    *y = fb_height() - TASKBAR_H - *h - 8;
+}
+
+static void menu_action(int index)
+{
+    switch (index) {
+    case 0:
+        wm_show(term_win);
+        break;
+    case 1:
+        wm_show(winapps_files());
+        break;
+    case 2:
+        wm_show(winapps_sysinfo());
+        break;
+    case 3:
+        wm_show(winapps_about());
+        break;
+    case 5:
+        power_reboot();
+        break;
+    case 6:
+        power_off();
+        break;
+    }
+}
+
+static void draw_taskbar(void)
+{
+    int w = fb_width();
+    int h = fb_height();
+    int by = h - TASKBAR_H;
+
+    gfx_blend_fill(0, by, w, TASKBAR_H, THEME_TASKBAR);
+    gfx_hline(0, by, w, 0xFF1C2331);
+
+    int mx = mouse_x();
+    int my = mouse_y();
+    int hover = my >= by && mx >= 8 && mx < 108;
+    if (start_open || hover)
+        gfx_rounded(8, by + 6, 100, TASKBAR_H - 12, 6, start_open ? THEME_ACCENT_DARK : 0xFF2A3142);
+    gfx_circle(28, by + TASKBAR_H / 2, 8, THEME_ACCENT);
+    gfx_circle(25, by + TASKBAR_H / 2 - 3, 3, 0xFFBFD6FF);
+    gfx_text_bold(44, by + (TASKBAR_H - 16) / 2, THEME_TEXT, "Orbit");
+
+    int bx = 124;
+    window_t* focused = wm_focused();
+    for (int i = 0; i < wm_count(); i++) {
+        window_t* win = wm_window(i);
+        int bw = 150;
+        uint32_t bg = win->visible ? (win == focused ? 0xFF323B50 : 0xFF242B3A) : 0xFF1A2030;
+        gfx_rounded(bx, by + 6, bw, TASKBAR_H - 12, 6, bg);
+        if (win->visible && win == focused)
+            gfx_fill(bx + 8, by + TASKBAR_H - 9, bw - 16, 2, THEME_ACCENT);
+        char label[19];
+        strlcpy(label, win->title, sizeof(label));
+        gfx_text(bx + 12, by + (TASKBAR_H - 16) / 2, win->visible ? THEME_TEXT : THEME_TEXT_DIM, label);
+        bx += bw + 8;
+    }
+
+    rtc_time_t t;
+    rtc_now(&t);
+    char clock[16];
+    char date[16];
+    ksnprintf(clock, sizeof(clock), "%02d:%02d:%02d", t.hour, t.minute, t.second);
+    ksnprintf(date, sizeof(date), "%02d/%02d/%d", t.day, t.month, t.year);
+    gfx_text_bold(w - 92, by + 5, THEME_TEXT, clock);
+    gfx_text(w - 92, by + 23, THEME_TEXT_DIM, date);
+}
+
+static void draw_start_menu(void)
+{
+    int x, y, w, h;
+    menu_rect(&x, &y, &w, &h);
+
+    gfx_shadow(x, y, w, h, 10);
+    gfx_rounded_blend(x, y, w, h, 10, THEME_MENU_BG);
+    gfx_rect(x, y, w, h, THEME_BORDER);
+
+    gfx_circle(x + 28, y + 30, 12, THEME_ACCENT);
+    gfx_circle(x + 23, y + 25, 4, 0xFFBFD6FF);
+    gfx_text_scaled(x + 50, y + 14, THEME_TEXT, "Orbit", 2, 1);
+    gfx_text(x + 50, y + 44, THEME_TEXT_DIM, ORBIT_BANNER);
+    gfx_hline(x + 12, y + 62, w - 24, 0xFF2A3142);
+
+    int my = mouse_y();
+    int mx = mouse_x();
+    int iy = y + 64 + 6;
+    for (int i = 0; i < MENU_COUNT; i++) {
+        if (menu_items[i].separator) {
+            gfx_hline(x + 12, iy + MENU_ITEM_H / 2, w - 24, 0xFF2A3142);
+        } else {
+            int hover = mx >= x && mx < x + w && my >= iy && my < iy + MENU_ITEM_H;
+            if (hover)
+                gfx_rounded_blend(x + 6, iy + 2, w - 12, MENU_ITEM_H - 4, 6, THEME_MENU_HOVER);
+            gfx_fill(x + 18, iy + MENU_ITEM_H / 2 - 4, 8, 8, i >= 5 ? THEME_CLOSE : THEME_ACCENT);
+            gfx_text(x + 40, iy + (MENU_ITEM_H - 16) / 2, THEME_TEXT, menu_items[i].label);
+        }
+        iy += MENU_ITEM_H;
+    }
+}
+
+static void draw_cursor(void)
+{
+    int mx = mouse_x();
+    int my = mouse_y();
+    for (int row = 0; row < 17; row++) {
+        for (int col = 0; col < 11; col++) {
+            char c = cursor_img[row][col];
+            if (c == 'X')
+                gfx_pixel(mx + col, my + row, 0xFF101010);
+            else if (c == '#')
+                gfx_pixel(mx + col, my + row, 0xFFF5F5F5);
+        }
+    }
+}
+
+static void composite(void)
+{
+    int w = fb_width();
+    int h = fb_height();
+    if (wallpaper)
+        memcpy(fb_backbuffer(), wallpaper, (size_t)w * (size_t)h * 4);
+    else
+        gfx_fill(0, 0, w, h, THEME_WALL_BOTTOM);
+    gfx_clip_reset();
+    wm_draw_all();
+    draw_taskbar();
+    if (start_open)
+        draw_start_menu();
+    draw_cursor();
+    fb_flip();
+}
+
+static void taskbar_click(int mx)
+{
+    if (mx >= 8 && mx < 108) {
+        start_open = !start_open;
+        dirty = 1;
+        return;
+    }
+    int bx = 124;
+    for (int i = 0; i < wm_count(); i++) {
+        window_t* win = wm_window(i);
+        if (mx >= bx && mx < bx + 150) {
+            if (win->visible && win == wm_focused())
+                wm_hide(win);
+            else
+                wm_show(win);
+            dirty = 1;
+            return;
+        }
+        bx += 158;
+    }
+}
+
+static void menu_click(int mx, int my)
+{
+    int x, y, w, h;
+    menu_rect(&x, &y, &w, &h);
+    if (mx < x || mx >= x + w || my < y || my >= y + h) {
+        start_open = 0;
+        dirty = 1;
+        return;
+    }
+    int iy = y + 64 + 6;
+    for (int i = 0; i < MENU_COUNT; i++) {
+        if (!menu_items[i].separator && my >= iy && my < iy + MENU_ITEM_H) {
+            start_open = 0;
+            dirty = 1;
+            menu_action(i);
+            return;
+        }
+        iy += MENU_ITEM_H;
+    }
+}
+
+static void clamp_window(window_t* win)
+{
+    int w = fb_width();
+    int h = fb_height();
+    if (win->x < -win->w + 60)
+        win->x = -win->w + 60;
+    if (win->x > w - 60)
+        win->x = w - 60;
+    if (win->y < 0)
+        win->y = 0;
+    if (win->y > h - TASKBAR_H - WM_TITLE_H)
+        win->y = h - TASKBAR_H - WM_TITLE_H;
+}
+
+static void handle_mouse(void)
+{
+    int buttons = mouse_buttons();
+    int pressed = buttons & ~prev_buttons;
+    int released = prev_buttons & ~buttons;
+    prev_buttons = buttons;
+
+    int mx = mouse_x();
+    int my = mouse_y();
+
+    if (pressed & 1) {
+        if (my >= fb_height() - TASKBAR_H) {
+            taskbar_click(mx);
+        } else if (start_open) {
+            menu_click(mx, my);
+        } else {
+            window_t* win = wm_hit(mx, my);
+            if (win) {
+                wm_show(win);
+                dirty = 1;
+                if (wm_hit_close(win, mx, my)) {
+                    wm_hide(win);
+                } else if (wm_hit_title(win, mx, my)) {
+                    dragging = 1;
+                    drag_win = win;
+                    drag_dx = mx - win->x;
+                    drag_dy = my - win->y;
+                } else if (win->on_click) {
+                    win->on_click(win, mx - win->x, my - win->y - WM_TITLE_H);
+                    dirty = 1;
+                }
+            }
+        }
+    }
+
+    if (dragging && (buttons & 1)) {
+        if (drag_win->x != mx - drag_dx || drag_win->y != my - drag_dy) {
+            drag_win->x = mx - drag_dx;
+            drag_win->y = my - drag_dy;
+            clamp_window(drag_win);
+            dirty = 1;
+        }
+    }
+
+    if (released & 1)
+        dragging = 0;
+}
+
+static void route_key(char c)
+{
+    window_t* win = wm_focused();
+    if (win && win->on_key)
+        win->on_key(win, (int)(uint8_t)c);
+}
+
+void desktop_pump(void)
+{
+    if (!active)
+        return;
+
+    int c;
+    while ((c = keyboard_poll()) >= 0)
+        route_key((char)c);
+    while (serial_has_input())
+        term_feed_key(serial_getc());
+
+    handle_mouse();
+
+    uint32_t t = pit_ticks();
+    if (t / 50 != last_blink) {
+        last_blink = t / 50;
+        dirty = 1;
+    }
+
+    rtc_time_t now;
+    rtc_now(&now);
+    if (now.second != last_second) {
+        last_second = now.second;
+        wm_tick_all();
+        dirty = 1;
+    }
+
+    if (term_consume_dirty())
+        dirty = 1;
+    if (mouse_consume_dirty())
+        dirty = 1;
+
+    if (dirty && t != last_draw_tick) {
+        composite();
+        dirty = 0;
+        last_draw_tick = t;
+    }
+}
+
+void desktop_init(void)
+{
+    term_init();
+    wallpaper_build();
+
+    int tw = term_pixel_width();
+    int th = term_pixel_height();
+    term_win = wm_create("Terminal", (fb_width() - tw) / 2, 56, tw, th);
+    term_win->on_draw = term_on_draw;
+    term_win->on_key = term_on_key;
+
+    winapps_init();
+
+    mouse_init(fb_width(), fb_height());
+
+    wm_show(term_win);
+    active = 1;
+    pit_set_idle(desktop_pump);
+    dirty = 1;
+    composite();
+}

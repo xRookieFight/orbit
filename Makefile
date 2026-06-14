@@ -3,12 +3,12 @@ LD      := ld
 NASM    := nasm
 OBJCOPY := objcopy
 
-CFLAGS := -m32 -ffreestanding -fno-pic -fno-pie -fno-stack-protector \
+CFLAGS := -m64 -ffreestanding -fno-pic -fno-pie -fno-stack-protector \
           -fno-builtin -nostdlib -fno-asynchronous-unwind-tables \
-          -mno-sse -mno-sse2 -mno-mmx -mno-80387 \
+          -mno-red-zone -mgeneral-regs-only -mcmodel=small \
           -Wall -Wextra -Isrc -O2
 
-LDFLAGS := -m elf_i386 -T src/linker.ld -nostdlib
+LDFLAGS := -m elf_x86_64 -T src/linker.ld -nostdlib -z max-page-size=0x1000
 
 BUILD := build
 
@@ -22,8 +22,8 @@ KERNEL_BIN := $(BUILD)/kernel.bin
 BOOT_BIN   := $(BUILD)/boot.bin
 IMAGE      := $(BUILD)/orbit.img
 
-QEMU       := qemu-system-i386
-QEMUFLAGS  := -drive file=$(IMAGE),format=raw,if=ide -m 128M -no-reboot \
+QEMU       := qemu-system-x86_64
+QEMUFLAGS  := -drive file=$(IMAGE),format=raw,if=ide -m 256M -no-reboot -vga std \
               -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
               -netdev user,id=net0 -device rtl8139,netdev=net0
 
@@ -36,7 +36,7 @@ $(BUILD)/%.o: src/%.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/%.o: src/%.asm | $(BUILD)
-	$(NASM) -f elf32 $< -o $@
+	$(NASM) -f elf64 $< -o $@
 
 $(KERNEL_ELF): $(ASMOBJS) $(COBJS)
 	$(LD) $(LDFLAGS) -o $@ $(ASMOBJS) $(COBJS)
@@ -59,7 +59,10 @@ run: $(IMAGE)
 gui: $(IMAGE)
 	$(QEMU) $(QEMUFLAGS) -serial stdio
 
+fullscreen: $(IMAGE)
+	$(QEMU) $(QEMUFLAGS) -serial stdio -full-screen
+
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all run gui clean
+.PHONY: all run gui fullscreen clean

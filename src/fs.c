@@ -288,17 +288,17 @@ void fs_init(void)
 
     fs_node_t* release = fs_create(root, "/etc/orbit-release", FS_FILE, 0);
     if (release)
-        fs_write(release, "Orbit 1.0\n", 10);
+        fs_write(release, "Orbit 2.0\n", 10);
 
     fs_node_t* motd = fs_create(root, "/etc/motd", FS_FILE, 0);
     if (motd) {
-        const char* m = "Welcome to Orbit 1.0 - CLI modular operating system\n";
+        const char* m = "Welcome to Orbit 2.0 - 64-bit graphical operating system\n";
         fs_write(motd, m, (uint32_t)strlen(m));
     }
 
     fs_node_t* readme = fs_create(root, "/home/root/readme.txt", FS_FILE, 0);
     if (readme) {
-        const char* r = "Orbit 1.0 root home.\nType help to list commands.\n";
+        const char* r = "Orbit 2.0 root home.\nType help to list commands.\n";
         fs_write(readme, r, (uint32_t)strlen(r));
     }
 }

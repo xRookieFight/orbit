@@ -1,28 +1,29 @@
 #include "console.h"
-#include "vga.h"
+#include "term.h"
 #include "serial.h"
-#include "keyboard.h"
+#include "desktop.h"
 #include "fmt.h"
 #include "io.h"
 
 void console_init(void)
 {
-    vga_init();
 }
 
 void console_clear(void)
 {
-    vga_clear();
+    if (desktop_active())
+        term_clear();
 }
 
 void console_set_color(uint8_t fg, uint8_t bg)
 {
-    vga_set_color(fg, bg);
+    term_set_color(fg, bg);
 }
 
 void console_putc(char c)
 {
-    vga_putc(c);
+    if (desktop_active())
+        term_putc(c);
     serial_putc(c);
 }
 
@@ -54,11 +55,12 @@ void console_printf(const char* fmt, ...)
 char console_getc(void)
 {
     for (;;) {
-        int c = keyboard_poll();
+        int c = term_read_key();
         if (c >= 0)
             return (char)c;
-        if (serial_has_input())
+        if (!desktop_active() && serial_has_input())
             return serial_getc();
+        desktop_pump();
         __asm__ volatile("hlt");
     }
 }

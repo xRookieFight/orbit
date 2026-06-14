@@ -2,7 +2,7 @@
 #include "idt.h"
 #include "pic.h"
 #include "console.h"
-#include "vga.h"
+#include "palette.h"
 #include "io.h"
 
 extern void isr0(void);  extern void isr1(void);  extern void isr2(void);  extern void isr3(void);
@@ -49,9 +49,9 @@ void isr_install(void)
     pic_remap();
 
     for (int i = 0; i < 32; i++)
-        idt_set_gate((uint8_t)i, (uint32_t)isr_stubs[i], 0x08, 0x8E);
+        idt_set_gate((uint8_t)i, (uint64_t)isr_stubs[i], 0x08, 0x8E);
     for (int i = 0; i < 16; i++)
-        idt_set_gate((uint8_t)(32 + i), (uint32_t)irq_stubs[i], 0x08, 0x8E);
+        idt_set_gate((uint8_t)(32 + i), (uint64_t)irq_stubs[i], 0x08, 0x8E);
 }
 
 void irq_register(int irq, irq_handler_t handler)
@@ -62,12 +62,12 @@ void irq_register(int irq, irq_handler_t handler)
 
 void isr_handler(regs_t* regs)
 {
-    console_set_color(VGA_LIGHT_RED, VGA_BLACK);
+    console_set_color(COL_LIGHT_RED, COL_BLACK);
     console_printf("\n*** Orbit kernel panic ***\n");
     if (regs->int_no < 32)
         console_printf("Exception: %s\n", exception_messages[regs->int_no]);
-    console_printf("int=%d err=%d eip=%p\n", regs->int_no, regs->err_code, (void*)regs->eip);
-    console_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    console_printf("int=%d err=%d rip=%p\n", (int)regs->int_no, (int)regs->err_code, (void*)regs->rip);
+    console_set_color(COL_LIGHT_GREY, COL_BLACK);
     for (;;)
         __asm__ volatile("cli; hlt");
 }

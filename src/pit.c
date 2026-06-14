@@ -8,6 +8,7 @@
 
 static volatile uint32_t tick_count;
 static uint32_t pit_hz;
+static void (*idle_hook)(void);
 
 static void pit_callback(regs_t* regs)
 {
@@ -35,9 +36,17 @@ uint32_t pit_frequency(void)
     return pit_hz;
 }
 
+void pit_set_idle(void (*hook)(void))
+{
+    idle_hook = hook;
+}
+
 void pit_sleep(uint32_t ms)
 {
     uint32_t target = tick_count + (ms * pit_hz) / 1000;
-    while (tick_count < target)
+    while (tick_count < target) {
+        if (idle_hook)
+            idle_hook();
         __asm__ volatile("hlt");
+    }
 }

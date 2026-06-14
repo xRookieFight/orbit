@@ -1,7 +1,7 @@
 #include "keyboard.h"
 #include "isr.h"
 #include "io.h"
-#include "vga.h"
+#include "term.h"
 
 #define KBD_DATA   0x60
 #define BUFFER_SIZE 256
@@ -58,11 +58,11 @@ static void keyboard_callback(regs_t* regs)
         return;
     }
     if (code == 0x49) {
-        vga_scroll_up();
+        term_scroll_view_up();
         return;
     }
     if (code == 0x51) {
-        vga_scroll_down();
+        term_scroll_view_down();
         return;
     }
     if (code >= 128)

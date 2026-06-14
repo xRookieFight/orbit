@@ -2,9 +2,9 @@
 #include "string.h"
 #include <stdint.h>
 
-#define HEAP_START 0x00200000u
-#define HEAP_SIZE  0x01000000u
-#define ALIGN      8u
+#define HEAP_START 0x00400000u
+#define HEAP_SIZE  0x04000000u
+#define ALIGN      16u
 
 typedef struct block {
     size_t size;
@@ -17,7 +17,7 @@ static size_t used_bytes;
 
 void heap_init(void)
 {
-    head_block = (block_t*)HEAP_START;
+    head_block = (block_t*)(uintptr_t)HEAP_START;
     head_block->size = HEAP_SIZE - sizeof(block_t);
     head_block->free = 1;
     head_block->next = NULL;
@@ -26,7 +26,7 @@ void heap_init(void)
 
 static size_t align_up(size_t n)
 {
-    return (n + (ALIGN - 1)) & ~(ALIGN - 1);
+    return (n + (ALIGN - 1)) & ~(size_t)(ALIGN - 1);
 }
 
 void* kmalloc(size_t size)

@@ -1,4 +1,4 @@
-[BITS 32]
+[BITS 64]
 
 section .text
 extern isr_handler
@@ -7,26 +7,23 @@ extern irq_handler
 %macro ISR_NOERR 1
 global isr%1
 isr%1:
-    cli
-    push dword 0
-    push dword %1
+    push qword 0
+    push qword %1
     jmp isr_common
 %endmacro
 
 %macro ISR_ERR 1
 global isr%1
 isr%1:
-    cli
-    push dword %1
+    push qword %1
     jmp isr_common
 %endmacro
 
 %macro IRQ 2
 global irq%1
 irq%1:
-    cli
-    push dword 0
-    push dword %2
+    push qword 0
+    push qword %2
     jmp irq_common
 %endmacro
 
@@ -80,44 +77,54 @@ IRQ 13, 45
 IRQ 14, 46
 IRQ 15, 47
 
+%macro PUSH_REGS 0
+    push rax
+    push rbx
+    push rcx
+    push rdx
+    push rsi
+    push rdi
+    push rbp
+    push r8
+    push r9
+    push r10
+    push r11
+    push r12
+    push r13
+    push r14
+    push r15
+%endmacro
+
+%macro POP_REGS 0
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rbp
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    pop rax
+%endmacro
+
 isr_common:
-    pusha
-    mov eax, ds
-    push eax
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    push esp
+    PUSH_REGS
+    mov rdi, rsp
     call isr_handler
-    add esp, 4
-    pop eax
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    popa
-    add esp, 8
-    iret
+    POP_REGS
+    add rsp, 16
+    iretq
 
 irq_common:
-    pusha
-    mov eax, ds
-    push eax
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    push esp
+    PUSH_REGS
+    mov rdi, rsp
     call irq_handler
-    add esp, 4
-    pop eax
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    popa
-    add esp, 8
-    iret
+    POP_REGS
+    add rsp, 16
+    iretq

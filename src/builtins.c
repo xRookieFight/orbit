@@ -8,7 +8,7 @@
 #include "heap.h"
 #include "pit.h"
 #include "console.h"
-#include "vga.h"
+#include "fb.h"
 #include "shell.h"
 #include "log.h"
 #include "string.h"
@@ -30,7 +30,7 @@ static int cmd_help(int argc, char** argv)
             api_print("help: no such command: %s\n", argv[1]);
         return 0;
     }
-    api_print("Orbit 1.0 commands:\n");
+    api_print("Orbit %s commands:\n", ORBIT_VERSION);
     for (int i = 0; i < app_count(); i++) {
         const app_t* app = app_at(i);
         api_print("  %-10s %s\n", app->name, app->summary);
@@ -44,7 +44,7 @@ static int cmd_version(int argc, char** argv)
     (void)argv;
     api_print("%s\n", api_version());
     api_print("build %s\n", ORBIT_BUILD);
-    api_print("architecture i386 protected mode\n");
+    api_print("architecture x86_64 long mode\n");
     return 0;
 }
 
@@ -56,25 +56,11 @@ static int cmd_clear(int argc, char** argv)
     return 0;
 }
 
-static int cmd_mode(int argc, char** argv)
+static int cmd_display(int argc, char** argv)
 {
-    if (argc < 2) {
-        api_print("display %dx%d\n", vga_cols(), vga_rows());
-        api_print("usage: mode <80x25|80x50>\n");
-        return 0;
-    }
-    const char* x = strchr(argv[1], 'x');
-    if (!x) {
-        api_print("mode: bad format %s (try 80x25 or 80x50)\n", argv[1]);
-        return 1;
-    }
-    int cols = atoi(argv[1]);
-    int rows = atoi(x + 1);
-    if (vga_set_resolution(cols, rows) != 0) {
-        api_print("mode: unsupported %s (try 80x25 or 80x50)\n", argv[1]);
-        return 1;
-    }
-    api_print("[display] switched to %dx%d\n", cols, rows);
+    (void)argc;
+    (void)argv;
+    api_print("resolution %dx%d, 32-bit color\n", fb_width(), fb_height());
     return 0;
 }
 
@@ -574,7 +560,7 @@ static const app_t builtin_apps[] = {
     { "help", "list commands or show command help", cmd_help },
     { "version", "show Orbit version", cmd_version },
     { "clear", "clear the terminal", cmd_clear },
-    { "mode", "change text resolution (80x25|80x50)", cmd_mode },
+    { "display", "show display information", cmd_display },
     { "echo", "print text", cmd_echo },
     { "pwd", "print working directory", cmd_pwd },
     { "ls", "list directory (-l for details)", cmd_ls },

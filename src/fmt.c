@@ -2,15 +2,15 @@
 #include "string.h"
 #include <stdint.h>
 
-static void emit_number(fmt_sink_t sink, void* ctx, unsigned int value,
+static void emit_number(fmt_sink_t sink, void* ctx, unsigned long long value,
                         int base, int is_signed, int width, char pad)
 {
-    char digits_buf[34];
+    char digits_buf[24];
     int negative = 0;
 
-    if (is_signed && base == 10 && (int)value < 0) {
+    if (is_signed && base == 10 && (long long)value < 0) {
         negative = 1;
-        value = (unsigned int)(-(int)value);
+        value = (unsigned long long)(-(long long)value);
     }
 
     if (value == 0) {
@@ -18,7 +18,7 @@ static void emit_number(fmt_sink_t sink, void* ctx, unsigned int value,
         digits_buf[1] = '\0';
     } else {
         static const char digits[] = "0123456789abcdef";
-        char tmp[34];
+        char tmp[24];
         int i = 0;
         while (value) {
             tmp[i++] = digits[value % (unsigned)base];
@@ -51,6 +51,7 @@ void fmt_vformat(fmt_sink_t sink, void* ctx, const char* fmt, va_list args)
         char pad = ' ';
         int left = 0;
         int width = 0;
+        int longs = 0;
         if (*fmt == '-') {
             left = 1;
             fmt++;
@@ -61,6 +62,10 @@ void fmt_vformat(fmt_sink_t sink, void* ctx, const char* fmt, va_list args)
         }
         while (*fmt >= '0' && *fmt <= '9') {
             width = width * 10 + (*fmt - '0');
+            fmt++;
+        }
+        while (*fmt == 'l') {
+            longs++;
             fmt++;
         }
 
@@ -84,19 +89,27 @@ void fmt_vformat(fmt_sink_t sink, void* ctx, const char* fmt, va_list args)
             break;
         }
         case 'd':
-        case 'i':
-            emit_number(sink, ctx, (unsigned int)va_arg(args, int), 10, 1, width, pad);
+        case 'i': {
+            long long v = longs ? va_arg(args, long long) : (long long)va_arg(args, int);
+            emit_number(sink, ctx, (unsigned long long)v, 10, 1, width, pad);
             break;
-        case 'u':
-            emit_number(sink, ctx, va_arg(args, unsigned int), 10, 0, width, pad);
+        }
+        case 'u': {
+            unsigned long long v = longs ? va_arg(args, unsigned long long)
+                                         : (unsigned long long)va_arg(args, unsigned int);
+            emit_number(sink, ctx, v, 10, 0, width, pad);
             break;
-        case 'x':
-            emit_number(sink, ctx, va_arg(args, unsigned int), 16, 0, width, pad);
+        }
+        case 'x': {
+            unsigned long long v = longs ? va_arg(args, unsigned long long)
+                                         : (unsigned long long)va_arg(args, unsigned int);
+            emit_number(sink, ctx, v, 16, 0, width, pad);
             break;
+        }
         case 'p':
             sink('0', ctx);
             sink('x', ctx);
-            emit_number(sink, ctx, (unsigned int)(uintptr_t)va_arg(args, void*), 16, 0, 8, '0');
+            emit_number(sink, ctx, (unsigned long long)(uintptr_t)va_arg(args, void*), 16, 0, 12, '0');
             break;
         case '%':
             sink('%', ctx);
