@@ -46,6 +46,8 @@ uint32_t net_gateway(void);
 void net_set_ip(uint32_t ip);
 void net_set_netmask(uint32_t mask);
 void net_set_gateway(uint32_t gw);
+uint32_t net_dns(void);
+void net_set_dns(uint32_t dns);
 
 void net_send(const uint8_t dst_mac[ETH_ALEN], uint16_t ethertype, const void* payload, uint16_t len);
 void net_rx_frame(const uint8_t* frame, uint16_t len);

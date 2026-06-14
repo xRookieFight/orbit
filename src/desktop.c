@@ -11,33 +11,42 @@
 #include "pit.h"
 #include "heap.h"
 #include "power.h"
-#include "winapps.h"
 #include "fmt.h"
 #include "string.h"
 #include "orbit.h"
 #include "io.h"
 #include "ata.h"
 #include "diskmap.h"
+#include "appreg.h"
+#include "apps/browser.h"
+#include "dns.h"
+#include "tcp.h"
 
 #define TASKBAR_H 44
 #define MENU_W 250
 #define MENU_ITEM_H 36
 
-typedef struct {
-    const char* label;
-    int separator;
-} menu_item_t;
+static int menu_count(void)
+{
+    return 1 + appreg_count() + 3;
+}
 
-static const menu_item_t menu_items[] = {
-    { "Terminal", 0 },
-    { "Files", 0 },
-    { "System Monitor", 0 },
-    { "About Orbit", 0 },
-    { "", 1 },
-    { "Reboot", 0 },
-    { "Shut Down", 0 },
-};
-#define MENU_COUNT ((int)(sizeof(menu_items) / sizeof(menu_items[0])))
+static const char* menu_label(int i, int* is_sep, int* is_power)
+{
+    int c = appreg_count();
+    *is_sep = 0;
+    *is_power = 0;
+    if (i == 0)
+        return "Terminal";
+    if (i <= c)
+        return appreg_name(i - 1);
+    if (i == c + 1) {
+        *is_sep = 1;
+        return "";
+    }
+    *is_power = 1;
+    return (i == c + 2) ? "Reboot" : "Shut Down";
+}
 
 #define CURSOR_W 11
 #define CURSOR_H 17
@@ -193,33 +202,22 @@ static void term_on_key(window_t* win, int ch)
 static void menu_rect(int* x, int* y, int* w, int* h)
 {
     *w = MENU_W;
-    *h = 64 + MENU_COUNT * MENU_ITEM_H + 12;
+    *h = 64 + menu_count() * MENU_ITEM_H + 12;
     *x = 8;
     *y = fb_height() - TASKBAR_H - *h - 8;
 }
 
 static void menu_action(int index)
 {
-    switch (index) {
-    case 0:
+    int c = appreg_count();
+    if (index == 0)
         wm_show(term_win);
-        break;
-    case 1:
-        wm_show(winapps_files());
-        break;
-    case 2:
-        wm_show(winapps_sysinfo());
-        break;
-    case 3:
-        wm_show(winapps_about());
-        break;
-    case 5:
+    else if (index <= c)
+        wm_show(appreg_window(index - 1));
+    else if (index == c + 2)
         power_reboot();
-        break;
-    case 6:
+    else if (index == c + 3)
         power_off();
-        break;
-    }
 }
 
 static void draw_taskbar(void)
@@ -283,15 +281,18 @@ static void draw_start_menu(void)
     int my = mouse_y();
     int mx = mouse_x();
     int iy = y + 64 + 6;
-    for (int i = 0; i < MENU_COUNT; i++) {
-        if (menu_items[i].separator) {
+    int total = menu_count();
+    for (int i = 0; i < total; i++) {
+        int is_sep, is_power;
+        const char* label = menu_label(i, &is_sep, &is_power);
+        if (is_sep) {
             gfx_hline(x + 12, iy + MENU_ITEM_H / 2, w - 24, 0xFF2A3142);
         } else {
             int hover = mx >= x && mx < x + w && my >= iy && my < iy + MENU_ITEM_H;
             if (hover)
                 gfx_rounded_blend(x + 6, iy + 2, w - 12, MENU_ITEM_H - 4, 6, THEME_MENU_HOVER);
-            gfx_fill(x + 18, iy + MENU_ITEM_H / 2 - 4, 8, 8, i >= 5 ? THEME_CLOSE : THEME_ACCENT);
-            gfx_text(x + 40, iy + (MENU_ITEM_H - 16) / 2, THEME_TEXT, menu_items[i].label);
+            gfx_fill(x + 18, iy + MENU_ITEM_H / 2 - 4, 8, 8, is_power ? THEME_CLOSE : THEME_ACCENT);
+            gfx_text(x + 40, iy + (MENU_ITEM_H - 16) / 2, THEME_TEXT, label);
         }
         iy += MENU_ITEM_H;
     }
@@ -400,8 +401,11 @@ static void menu_click(int mx, int my)
         return;
     }
     int iy = y + 64 + 6;
-    for (int i = 0; i < MENU_COUNT; i++) {
-        if (!menu_items[i].separator && my >= iy && my < iy + MENU_ITEM_H) {
+    int total = menu_count();
+    for (int i = 0; i < total; i++) {
+        int is_sep, is_power;
+        menu_label(i, &is_sep, &is_power);
+        if (!is_sep && my >= iy && my < iy + MENU_ITEM_H) {
             start_open = 0;
             dirty = 1;
             menu_action(i);
@@ -493,6 +497,10 @@ void desktop_pump(void)
 
     handle_mouse();
 
+    dns_poll();
+    tcp_poll();
+    browser_poll();
+
     uint32_t t = pit_ticks();
     if (t / 50 != last_blink) {
         last_blink = t / 50;
@@ -539,7 +547,7 @@ void desktop_init(void)
     term_win->on_draw = term_on_draw;
     term_win->on_key = term_on_key;
 
-    winapps_init();
+    appreg_init_all();
 
     mouse_init(fb_width(), fb_height());
 

@@ -14,6 +14,7 @@ static int if_present;
 static uint32_t if_ip;
 static uint32_t if_mask;
 static uint32_t if_gw;
+static uint32_t if_dns;
 
 static uint32_t stat_rx_packets;
 static uint32_t stat_tx_packets;
@@ -94,6 +95,20 @@ void net_set_netmask(uint32_t mask)
 void net_set_gateway(uint32_t gw)
 {
     if_gw = gw;
+}
+
+uint32_t net_dns(void)
+{
+    if (if_dns)
+        return if_dns;
+    if (if_gw)
+        return (if_gw & 0xFFFFFF00u) | 3u;
+    return 0;
+}
+
+void net_set_dns(uint32_t dns)
+{
+    if_dns = dns;
 }
 
 uint32_t net_rx_packets(void) { return stat_rx_packets; }

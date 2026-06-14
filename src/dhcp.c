@@ -102,6 +102,9 @@ static void dhcp_handler(uint32_t src_ip, uint16_t src_port, const uint8_t* data
         const uint8_t* gw = opt_find(opt, opt_len, 3, &l);
         if (gw)
             lease_gw = pack_ip(gw);
+        const uint8_t* dns = opt_find(opt, opt_len, 6, &l);
+        if (dns && l >= 4)
+            net_set_dns(pack_ip(dns));
         dhcp_state = 2;
     }
 }

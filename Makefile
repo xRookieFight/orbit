@@ -12,7 +12,7 @@ LDFLAGS := -m elf_x86_64 -T src/linker.ld -nostdlib -z max-page-size=0x1000
 
 BUILD := build
 
-SRCS    := $(wildcard src/*.c)
+SRCS    := $(wildcard src/*.c) $(wildcard src/apps/*.c)
 COBJS   := $(patsubst src/%.c,$(BUILD)/%.o,$(SRCS))
 ASMSRCS := $(wildcard src/*.asm)
 ASMOBJS := $(patsubst src/%.asm,$(BUILD)/%.o,$(ASMSRCS))
@@ -34,6 +34,7 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 $(BUILD)/%.o: src/%.c | $(BUILD)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/%.o: src/%.asm | $(BUILD)

@@ -3,6 +3,7 @@
 #include "arp.h"
 #include "icmp.h"
 #include "udp.h"
+#include "tcp.h"
 #include "string.h"
 
 typedef struct __attribute__((packed)) {
@@ -118,4 +119,6 @@ void ip_input(const uint8_t* src_mac, const uint8_t* data, uint16_t len)
         icmp_input(src, payload, plen);
     else if (h->proto == IP_PROTO_UDP)
         udp_input(src, payload, plen);
+    else if (h->proto == IP_PROTO_TCP)
+        tcp_input(src, payload, plen);
 }

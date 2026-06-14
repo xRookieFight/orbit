@@ -62,10 +62,15 @@ void kmain(void)
     net_init();
     udp_init();
     dhcp_init();
-    if (rtl8139_init() == 0)
+    if (rtl8139_init() == 0) {
         serial_write("[boot] rtl8139 nic detected\n");
-    else
+        if (dhcp_configure() == 0)
+            serial_write("[boot] dhcp configured\n");
+        else
+            serial_write("[boot] dhcp failed\n");
+    } else {
         serial_write("[boot] no network device\n");
+    }
     netcmd_register();
 
     log_init();

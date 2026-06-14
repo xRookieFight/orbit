@@ -12,6 +12,10 @@ SECTIONS
 
     .rodata : {
         *(.rodata*)
+        . = ALIGN(8);
+        __gui_apps_start = .;
+        KEEP(*(gui_apps))
+        __gui_apps_end = .;
     }
 
     .data : {
