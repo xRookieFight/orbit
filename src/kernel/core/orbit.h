@@ -6,6 +6,10 @@
 #define ORBIT_TAGLINE "a 64-bit graphical operating system"
 #define ORBIT_BUILD   __DATE__ " " __TIME__
 
+#ifndef ORBIT_DEBUG_SERIAL
+#define ORBIT_DEBUG_SERIAL 0
+#endif
+
 #define ORBIT_MAX_NAME   32
 #define ORBIT_MAX_PATH   256
 #define ORBIT_MAX_LINE   256

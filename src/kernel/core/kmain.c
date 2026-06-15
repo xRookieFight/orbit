@@ -1,10 +1,8 @@
 #include "orbit.h"
 #include "console.h"
 #include "serial.h"
-#include "io.h"
 #include "idt.h"
 #include "isr.h"
-#include "pic.h"
 #include "pit.h"
 #include "keyboard.h"
 #include "heap.h"
@@ -26,16 +24,37 @@
 
 static void warmup_serial(void)
 {
+#if ORBIT_DEBUG_SERIAL
     for (volatile int i = 0; i < 400000; i++)
         ;
     serial_putc('\n');
+#endif
+}
+
+static void boot_log(const char* msg)
+{
+#if ORBIT_DEBUG_SERIAL
+    serial_write(msg);
+#else
+    (void)msg;
+#endif
+}
+
+static void start_shell(void)
+{
+    console_set_color(COL_LIGHT_CYAN, COL_BLACK);
+    console_printf("  %s\n", ORBIT_BANNER);
+    console_set_color(COL_LIGHT_GREY, COL_BLACK);
+    console_printf("  %s\n\n", ORBIT_TAGLINE);
+
+    shell_run();
 }
 
 static void kernel_init(void)
 {
     serial_init();
     warmup_serial();
-    serial_write("[boot] orbit " ORBIT_VERSION " x86_64\n");
+    boot_log("[boot] orbit " ORBIT_VERSION " x86_64\n");
 
     idt_init();
     isr_install();
@@ -46,7 +65,7 @@ static void kernel_init(void)
 
     heap_init();
     fb_init();
-    serial_write("[boot] framebuffer\n");
+    boot_log("[boot] framebuffer\n");
 }
 
 static void os_init(void)
@@ -65,13 +84,13 @@ static void network_init(void)
     udp_init();
     dhcp_init();
     if (rtl8139_init() == 0) {
-        serial_write("[boot] rtl8139 nic detected\n");
+        boot_log("[boot] rtl8139 nic detected\n");
         if (dhcp_configure() == 0)
-            serial_write("[boot] dhcp configured\n");
+            boot_log("[boot] dhcp configured\n");
         else
-            serial_write("[boot] dhcp failed\n");
+            boot_log("[boot] dhcp failed\n");
     } else {
-        serial_write("[boot] no network device\n");
+        boot_log("[boot] no network device\n");
     }
     netcmd_register();
 }
@@ -87,12 +106,12 @@ void kmain(void)
 
     klog("INFO", "Orbit %s boot complete", ORBIT_VERSION);
 
-    console_set_color(COL_LIGHT_CYAN, COL_BLACK);
-    console_printf("  %s\n", ORBIT_BANNER);
-    console_set_color(COL_LIGHT_GREY, COL_BLACK);
-    console_printf("  %s\n\n", ORBIT_TAGLINE);
+    while (!gui_shell_requested()) {
+        gui_pump();
+        __asm__ volatile("hlt");
+    }
 
-    shell_run();
+    start_shell();
 
     for (;;)
         __asm__ volatile("hlt");

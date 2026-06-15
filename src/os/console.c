@@ -1,4 +1,5 @@
 #include "console.h"
+#include "orbit.h"
 #include "serial.h"
 #include "fmt.h"
 
@@ -29,7 +30,8 @@ void console_putc(char c)
 {
     if (backend && backend->active && backend->active() && backend->putc)
         backend->putc(c);
-    serial_putc(c);
+    if (ORBIT_DEBUG_SERIAL || !(backend && backend->active && backend->active()))
+        serial_putc(c);
 }
 
 void console_write(const char* s)

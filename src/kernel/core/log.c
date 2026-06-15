@@ -1,4 +1,5 @@
 #include "log.h"
+#include "orbit.h"
 #include "fmt.h"
 #include "serial.h"
 #include "fs.h"
@@ -29,7 +30,8 @@ void klog(const char* level, const char* fmt, ...)
         line[off] = '\0';
     }
 
-    serial_write(line);
+    if (ORBIT_DEBUG_SERIAL)
+        serial_write(line);
     if (log_file)
         fs_append(log_file, line, (uint32_t)off);
 }

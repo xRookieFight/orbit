@@ -14,7 +14,6 @@
 #include "fmt.h"
 #include "string.h"
 #include "orbit.h"
-#include "io.h"
 #include "ata.h"
 #include "diskmap.h"
 #include "appreg.h"
@@ -61,6 +60,7 @@ static int last_my = -1;
 static window_t* term_win;
 static int active;
 static int dirty;
+static int shell_requested;
 static int start_open;
 static int dragging;
 static window_t* drag_win;
@@ -104,6 +104,17 @@ void desktop_mark_dirty(void)
 int desktop_active(void)
 {
     return active;
+}
+
+int desktop_shell_requested(void)
+{
+    return shell_requested;
+}
+
+static void desktop_open_terminal(void)
+{
+    wm_show(term_win);
+    shell_requested = 1;
 }
 
 static void wallpaper_paint_procedural(int w, int h)
@@ -217,7 +228,7 @@ static void menu_action(int index)
 {
     int c = appreg_count();
     if (index == 0)
-        wm_show(term_win);
+        desktop_open_terminal();
     else if (index <= c)
         wm_show(appreg_window(index - 1));
     else if (index == c + 2)
@@ -386,10 +397,13 @@ static void taskbar_click(int mx)
     for (int i = 0; i < wm_count(); i++) {
         window_t* win = wm_window(i);
         if (mx >= bx && mx < bx + 150) {
-            if (win->visible && win == wm_focused())
+            if (win == term_win && !win->visible) {
+                desktop_open_terminal();
+            } else if (win->visible && win == wm_focused()) {
                 wm_hide(win);
-            else
+            } else {
                 wm_show(win);
+            }
             dirty = 1;
             return;
         }
@@ -591,7 +605,6 @@ void desktop_init(void)
 
     mouse_init(fb_width(), fb_height());
 
-    wm_show(term_win);
     active = 1;
     console_bind_backend(&desktop_console);
     pit_set_idle(desktop_pump);
